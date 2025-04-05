@@ -5,6 +5,29 @@ from connect import session
 from models import Student, Group, Lecturer, Course, GradeBook
 
 
+def prep_query_1(session, agg_func, agg_alias: str, course_name: str):
+    """Prepared query for Students of some course with drades aggregation"""
+    return (
+        session.query(Student, agg_func(GradeBook.value).label(agg_alias))
+        .select_from(Student)
+        .join(Course, Course.name == course_name)
+        .join(
+            GradeBook,
+            and_(Student.id == GradeBook.student_id, Course.id == GradeBook.course_id),
+        )
+    )
+
+
+def prep_query_2(session, argument, lecturer_name: str):
+    """Prepared query for Courses of the some lecturer"""
+    return (
+        session.query(argument)
+        .select_from(Lecturer)
+        .join(Course, Lecturer.id == Course.lecturer_id)
+        .filter(Lecturer.name == lecturer_name)
+    )
+
+
 def select_1(session):
     """Знайти 5 студентів із найбільшим середнім балом з усіх предметів."""
     result = (
@@ -23,13 +46,7 @@ def select_1(session):
 def select_2(session, course_name: str):
     """Знайти студента із найвищим середнім балом з певного предмета."""
     (student, grade_average) = (
-        session.query(Student, func.avg(GradeBook.value).label("grade_average"))
-        .select_from(Student)
-        .join(Course, Course.name == course_name)
-        .join(
-            GradeBook,
-            and_(Student.id == GradeBook.student_id, Course.id == GradeBook.course_id),
-        )
+        prep_query_1(session, func.avg, "grade_average", course_name)
         .group_by(Student)
         .order_by(desc("grade_average"))
         .limit(1)
@@ -64,13 +81,7 @@ def select_4(session):
 
 def select_5(session, lecturer_name: str):
     """Знайти які курси читає певний викладач."""
-    result = (
-        session.query(Course)
-        .select_from(Lecturer)
-        .join(Course, Lecturer.id == Course.lecturer_id)
-        .filter(Lecturer.name == lecturer_name)
-        .all()
-    )
+    result = prep_query_2(session, Course, lecturer_name).all()
     print(f"\n5. Викладач {lecturer_name} читає такі курси:")
     for course in result:
         print(f"\t{course}")
@@ -93,13 +104,7 @@ def select_7(session, group_name: str, course_name: str):
     """Знайти оцінки студентів у окремій групі з певного предмета."""
     subq = session.query(Group.id).filter(Group.name == group_name).subquery()
     result = (
-        session.query(Student, func.array_agg(GradeBook.value).label("grades"))
-        .select_from(Student)
-        .join(Course, Course.name == course_name)
-        .join(
-            GradeBook,
-            and_(Student.id == GradeBook.student_id, Course.id == GradeBook.course_id),
-        )
+        prep_query_1(session, func.array_agg, "grades", course_name)
         .filter(Student.group_id.in_(select(subq)))
         .group_by(Student)
     )
@@ -140,13 +145,7 @@ def select_9(session, student_name: str):
 
 def select_10(session, student_name: str, lecturer_name: str):
     """Список курсів, які певному студенту читає певний викладач."""
-    subq = (
-        session.query(Course.id)
-        .select_from(Lecturer)
-        .join(Course, Lecturer.id == Course.lecturer_id)
-        .filter(Lecturer.name == lecturer_name)
-        .subquery()
-    )
+    subq = prep_query_2(session, Course.id, lecturer_name).subquery()
     result = (
         session.query(Course)
         .select_from(Student)
@@ -163,12 +162,12 @@ def select_10(session, student_name: str, lecturer_name: str):
 
 if __name__ == "__main__":
     select_1(session)
-    select_2(session, 'Energy engineer')
-    select_3(session, 'Energy engineer')
+    select_2(session, "Energy engineer")
+    select_3(session, "Energy engineer")
     select_4(session)
-    select_5(session, 'Dr. Tammy Perez')
-    select_6(session, 'Second group')
+    select_5(session, "Dr. Tammy Perez")
+    select_6(session, "Second group")
     select_7(session, "Second group", "Energy engineer")
-    select_8(session, 'Dr. Tammy Perez')
-    select_9(session, 'Allison Mcdonald')
+    select_8(session, "Dr. Tammy Perez")
+    select_9(session, "Allison Mcdonald")
     select_10(session, "Allison Mcdonald", "Dr. Tammy Perez")
